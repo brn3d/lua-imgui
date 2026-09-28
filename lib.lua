@@ -1121,10 +1121,87 @@ function ImGui:ContainerClass(Frame: Frame, Class, Window)
 		return ObjectClass 
 	end
 
-	return ContainerClass
-end
+	function ContainerClass:MultiCombo(Config)
+		Config = Config or {}
+		Config.Open = false
+		Config.Selected = Config.Selected or {}
 
-function ImGui:Dropdown(Config)
+		local Combo: TextButton = Prefabs.Combo:Clone()
+		local Toggle: ImageButton = Combo.Toggle.ToggleButton
+		local ValueText = Combo.ValueText
+		ValueText.Text = Config.Placeholder or ""
+
+		local Dropdown = nil
+		local ObjectClass = self:NewInstance(Combo, Config)
+
+		local ComboHovering = ImGui:ConnectHover({
+			Parent = Combo
+		})
+
+		local function UpdateDisplay()
+			local keys = {}
+			for k in next, Config.Selected do
+				table.insert(keys, tostring(k))
+			end
+			table.sort(keys)
+			ValueText.Text = #keys > 0 and table.concat(keys, ", ") or (Config.Placeholder or "")
+		end
+
+		local function FireCallback()
+			local func = Config.Callback or NullFunction
+			func(ObjectClass, Config.Selected)
+		end
+
+		function Config:SetSelected(value, state)
+			Config.Selected[value] = state or nil
+			UpdateDisplay()
+			FireCallback()
+		end
+
+		function Config:GetSelected()
+			return Config.Selected
+		end
+
+		function Config:SetOpen(Open: true)
+			local Animate = Config.NoAnimation ~= true
+			ImGui:HeaderAnimate(Combo, Animate, Open, Combo, Toggle)
+			Config.Open = Open
+
+			if Open then
+				Dropdown = ImGui:MultiDropdown({
+					Parent   = Combo,
+					Items    = Config.Items or {},
+					Selected = Config.Selected,
+					Toggle   = function(value, state)
+						Config:SetSelected(value, state)
+					end,
+					Closed = function()
+						if not ComboHovering.Hovering then
+							Config:SetOpen(false)
+						end
+					end,
+				})
+			end
+
+			return self
+		end
+
+		local function ToggleOpen()
+			if Dropdown then
+				Dropdown:Close()
+			end
+			Config:SetOpen(not Config.Open)
+		end
+
+		Combo.Activated:Connect(ToggleOpen)
+		Toggle.Activated:Connect(ToggleOpen)
+		ImGui:ApplyAnimations(Combo, "Buttons")
+
+		UpdateDisplay()
+		return ObjectClass
+	end
+
+
 	local Parent: GuiObject = Config.Parent
 	if not Parent then return end
 
@@ -1184,6 +1261,78 @@ function ImGui:Dropdown(Config)
 	local MaxSizeY = Config.MaxSizeY or 200
 	local YSize = math.clamp(Selection.AbsoluteCanvasSize.Y, Size.Y, MaxSizeY)
 	Selection.Size = UDim2.fromOffset(Size.X-Padding, YSize)
+
+	return Config
+end
+
+function ImGui:MultiDropdown(Config)
+	local Parent: GuiObject = Config.Parent
+	if not Parent then return end
+
+	local Selection: ScrollingFrame = Prefabs.Selection:Clone()
+	local UIStroke = Selection:FindFirstChildOfClass("UIStroke")
+
+	local Padding = UIStroke.Thickness * 2
+	local Position = Parent.AbsolutePosition
+	local Size = Parent.AbsoluteSize
+
+	Selection.Parent = self.ScreenGui
+	Selection.Position = UDim2.fromOffset(Position.X + Padding, Position.Y + Size.Y)
+
+	local Hover = self:ConnectHover({
+		Parent = Selection,
+		OnInput = function(MouseHovering, Input)
+			if not Input.UserInputType.Name:find("Mouse") then return end
+			if not MouseHovering then
+				Config:Close()
+			end
+		end,
+	})
+
+	function Config:Close()
+		if Config.Closed then Config.Closed() end
+		Hover:Disconnect()
+		Selection:Remove()
+	end
+
+	local ItemTemplate: TextButton = Selection.Template
+	ItemTemplate.Visible = false
+
+	-- track button references so we can update their appearance
+	local buttons = {}
+
+	local function updateButton(btn, value)
+		local active = Config.Selected[value] ~= nil
+		-- prefix with a tick or dash so selection is obvious
+		btn.Text = (active and "✓  " or "    ") .. tostring(value)
+	end
+
+	for Index, Index2 in next, Config.Items do
+		local Value = typeof(Index) ~= "number" and Index or Index2
+
+		local NewItem: TextButton = ItemTemplate:Clone()
+		NewItem.Parent = Selection
+		NewItem.Visible = true
+		buttons[Value] = NewItem
+
+		updateButton(NewItem, Value)
+
+		NewItem.Activated:Connect(function()
+			-- toggle selection without closing
+			local active = Config.Selected[Value] ~= nil
+			Config.Toggle(Value, not active or nil)
+			-- refresh all buttons since Selected table changed
+			for v, btn in next, buttons do
+				updateButton(btn, v)
+			end
+		end)
+
+		self:ApplyAnimations(NewItem, "Tabs")
+	end
+
+	local MaxSizeY = Config.MaxSizeY or 200
+	local YSize = math.clamp(Selection.AbsoluteCanvasSize.Y, Size.Y, MaxSizeY)
+	Selection.Size = UDim2.fromOffset(Size.X - Padding, YSize)
 
 	return Config
 end
