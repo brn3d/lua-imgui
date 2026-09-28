@@ -1204,6 +1204,64 @@ function ImGui:ContainerClass(Frame: Frame, Class, Window)
 	return ContainerClass
 end
 
+function ImGui:Dropdown(Config)
+	local Parent: GuiObject = Config.Parent
+	if not Parent then return end
+
+	local Selection: ScrollingFrame = Prefabs.Selection:Clone()
+	local UIStroke = Selection:FindFirstChildOfClass("UIStroke")
+
+	local Padding = UIStroke.Thickness*2
+	local Position = Parent.AbsolutePosition
+	local Size = Parent.AbsoluteSize
+
+	Selection.Parent = self.ScreenGui
+	Selection.Position = UDim2.fromOffset(Position.X+Padding, Position.Y+Size.Y)
+
+	local Hover = self:ConnectHover({
+		Parent = Selection,
+		OnInput = function(MouseHovering, Input)
+			if not Input.UserInputType.Name:find("Mouse") then return end
+			if not MouseHovering then
+				Config:Close()
+			end
+		end,
+	})
+
+	function Config:Close()
+		local CloseCallback = Config.Closed
+		if CloseCallback then CloseCallback() end
+		Hover:Disconnect()
+		Selection:Remove()
+	end
+
+	local function SetValue(Value)
+		Config:Close()
+		Config:SetValue(Value)
+	end
+
+	local ItemTemplate: TextButton = Selection.Template
+	ItemTemplate.Visible = false
+
+	for Index, Index2 in next, Config.Items do
+		local Value = typeof(Index) ~= "number" and Index or Index2
+		local NewItem: TextButton = ItemTemplate:Clone()
+		NewItem.Text = tostring(Value)
+		NewItem.Parent = Selection
+		NewItem.Visible = true
+		NewItem.Activated:Connect(function()
+			return SetValue(Value)
+		end)
+		self:ApplyAnimations(NewItem, "Tabs")
+	end
+
+	local MaxSizeY = Config.MaxSizeY or 200
+	local YSize = math.clamp(Selection.AbsoluteCanvasSize.Y, Size.Y, MaxSizeY)
+	Selection.Size = UDim2.fromOffset(Size.X-Padding, YSize)
+
+	return Config
+end
+
 function ImGui:MultiDropdown(Config)
 	local Parent: GuiObject = Config.Parent
 	if not Parent then return end
@@ -1222,7 +1280,6 @@ function ImGui:MultiDropdown(Config)
 		Parent = Selection,
 		OnInput = function(MouseHovering, Input)
 			if not Input.UserInputType.Name:find("Mouse") then return end
-
 			if not MouseHovering then
 				Config:Close()
 			end
@@ -1230,32 +1287,37 @@ function ImGui:MultiDropdown(Config)
 	})
 
 	function Config:Close()
-		local CloseCallback = Config.Closed
-		if CloseCallback then
-			CloseCallback()
-		end
-
+		if Config.Closed then Config.Closed() end
 		Hover:Disconnect()
 		Selection:Remove()
-	end
-
-	local function SetValue(Value)
-		Config:Close()
-		Config:SetValue(Value)
 	end
 
 	local ItemTemplate: TextButton = Selection.Template
 	ItemTemplate.Visible = false
 
+	local buttons = {}
+
+	local function updateButton(btn, value)
+		local active = Config.Selected[value] ~= nil
+		btn.Text = (active and "✓  " or "    ") .. tostring(value)
+	end
+
 	for Index, Index2 in next, Config.Items do
 		local Value = typeof(Index) ~= "number" and Index or Index2
 
 		local NewItem: TextButton = ItemTemplate:Clone()
-		NewItem.Text = tostring(Value)
 		NewItem.Parent = Selection
 		NewItem.Visible = true
+		buttons[Value] = NewItem
+
+		updateButton(NewItem, Value)
+
 		NewItem.Activated:Connect(function()
-			return SetValue(Value)
+			local active = Config.Selected[Value] ~= nil
+			Config.Toggle(Value, not active or nil)
+			for v, btn in next, buttons do
+				updateButton(btn, v)
+			end
 		end)
 
 		self:ApplyAnimations(NewItem, "Tabs")
@@ -1263,17 +1325,10 @@ function ImGui:MultiDropdown(Config)
 
 	local MaxSizeY = Config.MaxSizeY or 200
 	local YSize = math.clamp(Selection.AbsoluteCanvasSize.Y, Size.Y, MaxSizeY)
-	Selection.Size = UDim2.fromOffset(Size.X-Padding, YSize)
+	Selection.Size = UDim2.fromOffset(Size.X - Padding, YSize)
 
 	return Config
 end
-
-function ImGui:MultiDropdown(Config)
-	local Parent: GuiObject = Config.Parent
-	if not Parent then return end
-
-	local Selection: ScrollingFrame = Prefabs.Selection:Clone()
-	local UIStroke = Selection:FindFirstChildOfClass("UIStroke")
 
 	local Padding = UIStroke.Thickness * 2
 	local Position = Parent.AbsolutePosition
