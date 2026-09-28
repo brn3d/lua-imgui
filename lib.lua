@@ -1725,4 +1725,22 @@ ImGui.FullScreenGui = ImGui:CreateInstance("ScreenGui", GuiParent, {
 	ScreenInsets = Enum.ScreenInsets.None
 })
 
+--// Unload: destroy all ScreenGuis and reset state so reinject works cleanly
+function ImGui:Unload()
+	-- destroy windows
+	for Window in next, self.Windows do
+		pcall(function() Window:Destroy() end)
+	end
+	self.Windows = {}
+
+	-- destroy ScreenGuis
+	pcall(function() self.ScreenGui:Destroy() end)
+	pcall(function() self.FullScreenGui:Destroy() end)
+	self.ScreenGui     = nil
+	self.FullScreenGui = nil
+
+	-- clear prefab cache so next load fetches fresh
+	_G["DepsoImGui"] = nil
+end
+
 return ImGui
