@@ -1201,7 +1201,10 @@ function ImGui:ContainerClass(Frame: Frame, Class, Window)
 		return ObjectClass
 	end
 
+	return ContainerClass
+end
 
+function ImGui:MultiDropdown(Config)
 	local Parent: GuiObject = Config.Parent
 	if not Parent then return end
 
